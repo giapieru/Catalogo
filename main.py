@@ -11,23 +11,32 @@ GHL_REPLY_WEBHOOK = os.getenv("GHL_REPLY_WEBHOOK")
 custom_http_client = httpx.Client(proxies=None)
 client = OpenAI(api_key=OPENAI_API_KEY, http_client=custom_http_client)
 
-# Carica ListaTelefoni.txt
 with open("ListaTelefoni.txt", "rb") as f:
     tool_file = client.files.create(file=f, purpose="assistants")
 
 @app.route("/ghl-webhook", methods=["POST"])
 def handle_ghl():
+    # LOG DI DEBUG COMPLETO
+    print("📦 RAW request.data:", request.data.decode("utf-8"))
+    print("📬 Headers:", dict(request.headers))
+
     try:
-        data = request.json or {}
-        print("🔔 Payload in ingresso:", data)
+        data = request.get_json(force=True)  # forza il parsing anche se content-type è sbagliato
+        print("🔔 JSON decodificato:", data)
+    except Exception as e:
+        print("❌ Errore nel parsing JSON:", e)
+        return jsonify({"error": "Impossibile leggere il JSON"}), 400
 
-        msg = str(data.get("message", "")).strip()
-        phone = str(data.get("number", "")).strip()
+    # Continua con la logica solo se il JSON è valido
+    msg = str(data.get("message", "")).strip()
+    phone = str(data.get("number", "")).strip()
+    contact_id = data.get("contact_id")
 
-        if not msg or not phone:
-            print("❌ Messaggio o numero mancanti")
-            return jsonify({"error": "message o number mancanti"}), 400
+    if not msg or not phone:
+        print("❌ Messaggio o numero mancanti")
+        return jsonify({"error": "message o number mancanti"}), 400
 
+    try:
         thread = client.beta.threads.create()
         client.beta.threads.messages.create(
             thread_id=thread.id,
@@ -45,28 +54,24 @@ def handle_ghl():
             run_status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
             if run_status.status == "completed":
                 break
-            elif run_status.status == "failed":
-                return jsonify({"error": "Run fallito"}), 500
             time.sleep(1)
 
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         reply = messages.data[0].content[0].text.value
 
-        response = requests.post(GHL_REPLY_WEBHOOK, json={
-            "phone": phone,
-            "message": reply
-        })
+        payload = {"phone": phone, "message": reply}
+        if contact_id:
+            payload["contact_id"] = contact_id
 
-        if response.status_code != 200:
-            print("❌ Errore invio a GHL:", response.status_code, response.text)
-            return jsonify({"error": "webhook GHL fallito"}), 500
+        resp = requests.post(GHL_REPLY_WEBHOOK, json=payload)
+        print("✅ Risposta inviata a GHL:", resp.status_code, resp.text)
 
         return jsonify({"status": "ok", "reply": reply})
 
     except Exception as e:
-        print("❌ Errore interno:", e)
+        print("❌ Errore finale:", e)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 3000)))
-
+    port = int(os.getenv("PORT", 3000))
+    app.run(host="0.0.0.0", port=port)
