@@ -4,46 +4,41 @@ import httpx, requests, time, os
 
 app = Flask(__name__)
 
-# Variabili d’ambiente (mai esporre le chiavi in chiaro su GitHub)
+# Variabili d’ambiente (impostale su Render)
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID      = os.getenv("ASSISTANT_ID")
 GHL_REPLY_WEBHOOK = os.getenv("GHL_REPLY_WEBHOOK")
 
-# Client HTTP personalizzato (nessun proxy implicito)
+# Client HTTP esplicito senza proxy
 custom_http_client = httpx.Client(proxies=None)
 client = OpenAI(api_key=OPENAI_API_KEY, http_client=custom_http_client)
 
-# Carica ListaTelefoni.txt come risorsa per l’assistente
+# Carica ListaTelefoni.txt per l’assistente
 with open("ListaTelefoni.txt", "rb") as f:
     tool_file = client.files.create(file=f, purpose="assistants")
 
 @app.route("/ghl-webhook", methods=["POST"])
 def handle_ghl():
     data = request.json or {}
-    print("🔔 Payload in ingresso:", data)  # <-- log completo
+    print("🔔 Payload in ingresso:", data)  # ← Guarda nelle Logs qui sotto
 
-    # Estrarre testo del messaggio
-    raw_msg = data.get("message", "")
-    if isinstance(raw_msg, dict):
-        # GHL a volte invia {"body": "...", ...}
-        msg = raw_msg.get("body", "")
+    # Estrai il testo
+    raw = data.get("message", "")
+    # Se per qualche ragione arriva un dict, prendi .get("body")
+    if isinstance(raw, dict):
+        msg = raw.get("body", "")
     else:
-        msg = raw_msg
+        msg = raw
     msg = str(msg).strip()
 
-    # Estrarre numero di telefono
-    # Proviamo sia "number" che "phone"
-    phone = str(data.get("number", data.get("phone", ""))).strip()
+    # Estrai il numero
+    phone = str(data.get("number", "")).strip()
 
-    # Contatto opzionale
-    contact_id = data.get("contact_id")
-
-    # Se manca messaggio o numero, ritorna 400
     if not msg or not phone:
         return jsonify({"error": "message o number mancanti"}), 400
 
     try:
-        # 1) Crea thread e invia user message
+        # 1) crea thread e invia messaggio
         thread = client.beta.threads.create()
         client.beta.threads.messages.create(
             thread_id=thread.id,
@@ -51,30 +46,29 @@ def handle_ghl():
             content=msg
         )
 
-        # 2) Avvia la run con il file allegato
+        # 2) avvia la run
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             tool_resources={"file_ids": [tool_file.id]}
         )
 
-        # 3) Attendi completamento (max 30s)
+        # 3) attendi completamento
         for _ in range(30):
             status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
             if status.status == "completed":
                 break
             time.sleep(1)
 
-        # 4) Prendi la risposta
+        # 4) prendi la risposta
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         reply = messages.data[0].content[0].text.value
 
-        # 5) Invia la risposta a GHL
-        payload = {"phone": phone, "message": reply}
-        if contact_id:
-            payload["contact_id"] = contact_id
-
-        resp = requests.post(GHL_REPLY_WEBHOOK, json=payload)
+        # 5) invia la risposta a GHL
+        resp = requests.post(GHL_REPLY_WEBHOOK, json={
+            "phone":   phone,
+            "message": reply
+        })
         if resp.status_code != 200:
             print("Errore GHL webhook:", resp.status_code, resp.text)
             return jsonify({"error": "webhook GHL fallito"}), 500
@@ -88,3 +82,4 @@ def handle_ghl():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 3000))
     app.run(host="0.0.0.0", port=port)
+
