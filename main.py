@@ -1,5 +1,3 @@
-import subprocess
-subprocess.run(["pip", "install", "--upgrade", "openai==1.30.5"], check=True)
 
 from flask import Flask, request, jsonify
 from openai import OpenAI
