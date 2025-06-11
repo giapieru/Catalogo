@@ -1,20 +1,21 @@
-
 from flask import Flask, request, jsonify
 from openai import OpenAI
 import httpx, requests, time, os, traceback
 
 app = Flask(__name__)
 
-# Variabili d’ambiente da impostare su Render
+# Variabili da configurare su Render
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID      = os.getenv("ASSISTANT_ID")
 GHL_REPLY_WEBHOOK = os.getenv("GHL_REPLY_WEBHOOK")
 
-# Client HTTP senza proxy
-custom_http_client = httpx.Client(proxies=None)
-client = OpenAI(api_key=OPENAI_API_KEY, http_client=custom_http_client)
+# Client senza proxy impliciti
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    http_client=httpx.Client(proxies=None)
+)
 
-# Caricamento ListaTelefoni.txt
+# Carica ListaTelefoni.txt
 with open("ListaTelefoni.txt", "rb") as f:
     tool_file = client.files.create(file=f, purpose="assistants")
 
@@ -24,7 +25,6 @@ def handle_ghl():
         data = request.get_json(force=True)
         print("🔔 JSON ricevuto:", data)
 
-        # Estrai da customData
         custom = data.get("customData", {})
         msg = str(custom.get("message", "")).strip()
         phone = str(custom.get("number", "")).strip()
@@ -34,7 +34,6 @@ def handle_ghl():
             print("❌ Messaggio o numero mancanti")
             return jsonify({"error": "message o number mancanti"}), 400
 
-        # Thread e messaggio
         thread = client.beta.threads.create()
         client.beta.threads.messages.create(
             thread_id=thread.id,
@@ -42,32 +41,29 @@ def handle_ghl():
             content=msg
         )
 
-        # Run con file allegato
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             tool_resources={"file_ids": [tool_file.id]}
         )
 
-        # Attendi completamento
         for _ in range(30):
-            run_status = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+            run_status = client.beta.threads.runs.retrieve(
+                thread_id=thread.id, run_id=run.id
+            )
             if run_status.status == "completed":
                 break
             time.sleep(1)
 
-        # Estrai risposta
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         reply = messages.data[0].content[0].text.value
 
-        # Invia a GHL
         payload = {"phone": phone, "message": reply}
         if contact_id:
             payload["contact_id"] = contact_id
 
         resp = requests.post(GHL_REPLY_WEBHOOK, json=payload)
         print("✅ Inviato a GHL:", resp.status_code)
-
         return jsonify({"status": "ok", "reply": reply})
 
     except Exception as e:
