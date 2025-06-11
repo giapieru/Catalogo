@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: catalogo
+    env: python
+    buildCommand: pip install --upgrade pip && pip install --upgrade -r requirements.txt
+    startCommand: python main.py
+    plan: free
