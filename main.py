@@ -3,15 +3,20 @@ from openai import OpenAI
 import requests
 import time
 import os
+import httpx
 
 app = Flask(__name__)
 
-# Usa variabili d'ambiente (nessuna chiave esposta!)
+# Variabili d'ambiente (SICUREZZA MIGLIORE)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
 GHL_REPLY_WEBHOOK = os.getenv("GHL_REPLY_WEBHOOK")
 
-client = OpenAI(api_key=OPENAI_API_KEY, http_client=None)
+# Configurazione client HTTPX personalizzata SENZA PROXY
+custom_http_client = httpx.Client(proxies=None)
+
+# Client OpenAI con client HTTPX esplicito (Nessun errore proxies)
+client = OpenAI(api_key=OPENAI_API_KEY, http_client=custom_http_client)
 
 with open("ListaTelefoni.txt", "rb") as f:
     tool_file = client.files.create(file=f, purpose="assistants")
@@ -64,3 +69,4 @@ def handle_ghl():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3000)
+
