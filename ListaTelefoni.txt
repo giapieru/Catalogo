@@ -1,0 +1,3 @@
+IMEI,Marca,Modello,Colore,RAM,ROM,Grado,Prezzo,LinkImmagine
+23551,Apple,iPhone 11,White,25,365,A+,258,https://replit.com/@giannipierucci7/preventivo-bot#Catalogatore/1_23551_Apple_iPhone_11_White_365_A+.jpg
+2354,Apple,iPhone 15,Black,25,365,A+,369,https://replit.com/@giannipierucci7/preventivo-bot#Catalogatore/1_2354_Apple_iPhone_15_Black_365_A+.jpg
