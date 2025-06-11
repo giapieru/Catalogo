@@ -18,13 +18,14 @@ with open("ListaTelefoni.txt", "rb") as f:
     tool_file = client.files.create(file=f, purpose="assistants")
 
 @app.route("/ghl-webhook", methods=["POST"])
+@app.route("/ghl-webhook", methods=["POST"])
 def handle_ghl():
     data = request.json
     msg = data.get("message", "")
-    contact_id = data.get("contact_id", "")
-    phone = data.get("phone", "")
+    phone = data.get("number", "") # cambiato qui
+    contact_id = "N/A" # impostato fisso se non fornito
 
-    if not all([msg, contact_id, phone]):
+    if not all([msg, phone]):
         return jsonify({"error": "Dati mancanti"}), 400
 
     try:
@@ -67,6 +68,7 @@ def handle_ghl():
     except Exception as e:
         print(f"Errore interno: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3000)
