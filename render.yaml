@@ -2,6 +2,6 @@ services:
   - type: web
     name: catalogo
     env: python
-    buildCommand: pip install --upgrade pip && pip install --upgrade -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install --upgrade openai==1.30.5 httpx==0.27.0
     startCommand: python main.py
     plan: free
