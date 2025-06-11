@@ -7,15 +7,11 @@ import httpx
 
 app = Flask(__name__)
 
-# Variabili d'ambiente (SICUREZZA MIGLIORE)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
 GHL_REPLY_WEBHOOK = os.getenv("GHL_REPLY_WEBHOOK")
 
-# Configurazione client HTTPX personalizzata SENZA PROXY
 custom_http_client = httpx.Client(proxies=None)
-
-# Client OpenAI con client HTTPX esplicito (Nessun errore proxies)
 client = OpenAI(api_key=OPENAI_API_KEY, http_client=custom_http_client)
 
 with open("ListaTelefoni.txt", "rb") as f:
@@ -56,15 +52,20 @@ def handle_ghl():
         messages = client.beta.threads.messages.list(thread_id=thread.id)
         reply = messages.data[0].content[0].text.value
 
-        requests.post(GHL_REPLY_WEBHOOK, json={
+        response = requests.post(GHL_REPLY_WEBHOOK, json={
             "phone": phone,
             "message": reply,
             "contact_id": contact_id
         })
 
+        if response.status_code != 200:
+            print(f"Errore GHL webhook: {response.status_code}, {response.text}")
+            return jsonify({"error": "Errore webhook GHL"}), 500
+
         return jsonify({"status": "ok", "reply": reply})
 
     except Exception as e:
+        print(f"Errore interno: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
